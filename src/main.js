@@ -4,6 +4,8 @@ let roleUpgrader = require('role.upgrader');
 let roleBuilder = require('role.builder');
 let roleSoldier = require('role.soldier');
 
+let transientCache = require('cache.transient');
+
 let spawningInfo = [
     {role: roleWorker,   target: 8},
     {role: roleUpgrader, target: 3},
@@ -86,6 +88,9 @@ module.exports.loop = function () {
             console.log('-----', currTime, name, creep.memory.currentBehavior, creep.memory.timeOnCurrentBehavior);
         }
     }
+
+    let numPruned = transientCache.prune();
+    console.log('T:', incrementalTime(), '|', numPruned, 'records pruned from cache.');
     
     console.log("Time to tick:", Game.cpu.getUsed(), '| Ticks since last refresh:', Memory.ticksToLastRefresh++);
 }

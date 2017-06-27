@@ -1,3 +1,5 @@
+let cache = require('cache.transient');
+
 module.exports = {
     resolveCurrentTarget:function(creep) {
         return Game.getObjectById(this.getCurrentTarget(creep));
@@ -34,10 +36,27 @@ module.exports = {
         return true;
     },
 
+    shiftPotentialTarget:function(creep) {
+        if (this.numPotentialTargets(creep) > 0) {
+            return this.getPotentialTargets(creep).shift();
+        } else {
+            return false;
+        }
+    },
+
+    pushPotentialTarget:function(target, creep) {
+        this.getPotentialTargets(creep).push(target);
+    },
+
+    numPotentialTargets:function(creep) {
+        return this.getPotentialTargets(creep).length;
+    },
+
+
     /* Methods below this line directly reference creep memory. */
 
     clearTargets:function(creep) {
-        creep.memory.potentialTargets = [];
+        cache.storeValue(this.key(creep), null, 0);
         creep.memory.currentTarget = false;
     },
 
@@ -49,19 +68,14 @@ module.exports = {
         creep.memory.currentTarget = target;
     },
 
-    shiftPotentialTarget:function(creep) {
-        if (this.numPotentialTargets(creep) > 0) {
-            return creep.memory.potentialTargets.shift();
-        } else {
-            return false;
+    getPotentialTargets:function(creep) {
+        if(!cache.fetchValue(this.key(creep), true)) {
+            cache.storeValue(this.key(creep), [], 50);
         }
+        return cache.fetchValue(this.key(creep));
     },
 
-    pushPotentialTarget:function(target, creep) {
-        creep.memory.potentialTargets.push(target);
-    },
-
-    numPotentialTargets:function(creep) {
-        return creep.memory.potentialTargets.length;
+    key:function(creep) {
+        return creep.name + "_potentialTargets";
     }
 };

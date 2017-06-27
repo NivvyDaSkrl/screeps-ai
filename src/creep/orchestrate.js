@@ -39,7 +39,7 @@ module.exports = {
             }
         } else if (!behaviorMap[creep.memory.currentBehavior].run(creep)) {
             utilTargets.clearTargets(creep);
-            creep.memory.currentBehavior = false;
+            delete creep.memory.currentBehavior;
             creep.memory.timeOnCurrentBehavior = 0;
         } else {
             creep.memory.timeOnCurrentBehavior++;

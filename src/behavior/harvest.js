@@ -7,13 +7,12 @@ module.exports = {
     },
     moveOptions: {
         visualizePathStyle: {stroke: '#ffaa00'},
-        reusePath: 3,
-        maxOps: 1000,
-        ignoreRoads: true
+        reusePath: 7,
+        maxOps: 800
     },
 
     run: function (creep) {
-        var carried = _.sum(creep.carry);
+        let carried = _.sum(creep.carry);
 
         // determine if we can harvest
         if (carried >= creep.carryCapacity) {
