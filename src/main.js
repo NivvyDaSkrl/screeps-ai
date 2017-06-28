@@ -22,6 +22,38 @@ let incrementalTime = function() {
     return rval;
 }
 
+
+//metric-gathering; placed in main temporarily. I need to make a proper module for this
+let storeStats = function() {
+    if (Memory.stats == null) {
+        Memory.stats = {tick: Game.time};
+    }
+
+    Memory.stats.cpu = Game.cpu;
+    Memory.stats.cpu.used = Game.cpu.getUsed();
+    Memory.stats.gcl = Game.gcl;
+    Memory.stats.memory = {
+        used: RawMemory.get().length
+    };
+    Memory.stats.market = {
+        credits: Game.market.credits,
+        num_orders: Game.market.orders ? Object.keys(Game.market.orders).length : 0
+    };
+    Memory.stats.room = {};
+    for(let name in Game.rooms) {
+        if(Game.rooms[name]) {
+            Memory.stats.room[name] = {};
+            if(Game.rooms[name].controller) {
+                Memory.stats.room[name].controllerProgress = Game.rooms[name].controller.progress;
+                Memory.stats.room[name].controllerProgressTotal = Game.rooms[name].controller.progressTotal;
+            }
+            Memory.stats.room[name].energyAvailable = Game.rooms[name].energyAvailable;
+            Memory.stats.room[name].energyCapacityAvailable = Game.rooms[name].energyCapacityAvailable;
+        }
+
+    }
+}
+
 Memory.ticksToLastRefresh = 0;
 console.log('T:', Game.cpu.getUsed(), '| Setup completed.');
 module.exports.loop = function () {
@@ -78,12 +110,19 @@ module.exports.loop = function () {
         }
     }
     console.log('T:', incrementalTime(), '| Creep spawning finished.');
-    
+
+    Memory.stats.behavior = {};
+
     // run creep logic
     for(let name in Game.creeps) {
         let creep = Game.creeps[name];
         creepOrchestrator.run(creep);
         let currTime = incrementalTime();
+        if(!Memory.stats.behavior[creep.memory.currentBehavior]) {
+            Memory.stats.behavior[creep.memory.currentBehavior] = currTime;
+        } else {
+            Memory.stats.behavior[creep.memory.currentBehavior] += currTime;
+        }
         if (currTime > 1) {
             console.log('-----', currTime, name, creep.memory.currentBehavior, creep.memory.timeOnCurrentBehavior);
         }
@@ -91,6 +130,7 @@ module.exports.loop = function () {
 
     let numPruned = transientCache.prune();
     console.log('T:', incrementalTime(), '|', numPruned, 'records pruned from cache.');
-    
+
+    storeStats();
     console.log("Time to tick:", Game.cpu.getUsed(), '| Ticks since last refresh:', Memory.ticksToLastRefresh++);
 }
