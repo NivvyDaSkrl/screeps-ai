@@ -25,6 +25,6 @@ function Scheduler() {
  */
 Scheduler.prototype.addTask = function(task) {
     this.schedule.push(task);
-}
+};
 
 module.exports = Scheduler;
