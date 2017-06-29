@@ -7,9 +7,9 @@ let roleSoldier = require('role.soldier');
 let transientCache = require('cache.transient');
 
 let spawningInfo = [
-    {role: roleWorker,   target: 8},
-    {role: roleUpgrader, target: 3},
-    {role: roleBuilder,  target: 6},
+    {role: roleWorker,   target: 7},
+    {role: roleUpgrader, target: 5},
+    {role: roleBuilder,  target: 3},
     {role: roleSoldier,  target: 1}
 ];
 
@@ -20,17 +20,17 @@ let incrementalTime = function() {
     let rval = currTime - timeUsed;
     timeUsed = currTime;
     return rval;
-}
+};
 
 
 //metric-gathering; placed in main temporarily. I need to make a proper module for this
 let storeStats = function() {
+    let startTime = Game.cpu.getUsed();
     if (Memory.stats == null) {
         Memory.stats = {tick: Game.time};
     }
 
     Memory.stats.cpu = Game.cpu;
-    Memory.stats.cpu.used = Game.cpu.getUsed();
     Memory.stats.gcl = Game.gcl;
     Memory.stats.memory = {
         used: RawMemory.get().length
@@ -49,10 +49,32 @@ let storeStats = function() {
             }
             Memory.stats.room[name].energyAvailable = Game.rooms[name].energyAvailable;
             Memory.stats.room[name].energyCapacityAvailable = Game.rooms[name].energyCapacityAvailable;
+            let structures = Game.rooms[name].find(FIND_STRUCTURES, {filter:
+                (s) => {return s.structureType === STRUCTURE_CONTAINER && s.store}});
+            Memory.stats.room[name].energyStorage = 0;
+            Memory.stats.room[name].storageAvailable = 0;
+            for(let struct in structures) {
+                Memory.stats.room[name].storageAvailable += structures[struct].storeCapacity;
+                if(structures[struct].store){
+                    Memory.stats.room[name].energyStorage += structures[struct].store[RESOURCE_ENERGY];
+                }
+            }
+
         }
 
     }
-}
+    for(let name in Game.creeps) {
+        if(!Memory.stats.room[Game.creeps[name].room.name].creeps) {
+            Memory.stats.room[Game.creeps[name].room.name].creeps = 1;
+            Memory.stats.room[Game.creeps[name].room.name].energyOnCreeps = Game.creeps[name].carry[RESOURCE_ENERGY];
+        } else {
+            Memory.stats.room[Game.creeps[name].room.name].creeps++;
+            Memory.stats.room[Game.creeps[name].room.name].energyOnCreeps += Game.creeps[name].carry[RESOURCE_ENERGY];
+        }
+    }
+    Memory.stats.cpu.statsLoading = Game.cpu.getUsed() - startTime;
+    Memory.stats.cpu.used = Game.cpu.getUsed();
+};
 
 Memory.ticksToLastRefresh = 0;
 console.log('T:', Game.cpu.getUsed(), '| Setup completed.');
@@ -84,7 +106,7 @@ module.exports.loop = function () {
     // spawn additional creeps up to target numbers
     for(let index in spawningInfo) {
         let category = spawningInfo[index].role;
-        let categoryCreeps = _.filter(Game.creeps, (creep) => creep.memory.role == category.role);
+        let categoryCreeps = _.filter(Game.creeps, (creep) => creep.memory.role === category.role);
         if(categoryCreeps.length < spawningInfo[index].target) {
             let bodyTemplate = false;
             for(let index in category.bodyTemplates) {

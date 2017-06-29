@@ -30,15 +30,21 @@ module.exports = {
 
         // store target IDs
         for(let index in targets) {
-            this.pushPotentialTarget(targets[index].id, creep);
+            this.pushPotentialTarget(
+                {id: targets[index].id, initDist: creep.pos.getRangeTo(targets[index])},
+                creep
+            );
         }
+
+        // sort target IDs
+        this.getPotentialTargets(creep).sort(this.sortFunction);
 
         return true;
     },
 
     shiftPotentialTarget:function(creep) {
         if (this.numPotentialTargets(creep) > 0) {
-            return this.getPotentialTargets(creep).shift();
+            return this.getPotentialTargets(creep).shift().id;
         } else {
             return false;
         }
@@ -77,5 +83,15 @@ module.exports = {
 
     key:function(creep) {
         return creep.name + "_potentialTargets";
+    },
+
+    sortFunction: function(a, b) {
+        if (a.initDist < b.initDist) {
+            return -1;
+        } else if (a.initDist > b.initDist) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 };

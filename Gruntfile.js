@@ -10,6 +10,7 @@ module.exports = function(grunt) {
     grunt.loadNpmTasks('grunt-contrib-clean');
     grunt.loadNpmTasks('grunt-contrib-copy');
     grunt.loadNpmTasks('grunt-file-append');
+    grunt.loadNpmTasks('grunt-mocha-test');
 
     grunt.initConfig({
         screeps: {
@@ -20,7 +21,7 @@ module.exports = function(grunt) {
                 ptr: ptr
             },
             dist: {
-                src: ['dist/*.js']
+                src: ['dist/*.js', '!dist/test_*.js']
             }
         },
 
@@ -33,17 +34,29 @@ module.exports = function(grunt) {
         copy: {
             // Pushes the game code to the dist folder so it can be modified before being sent to the Screeps server.
             screeps: {
-                files: [{
-                    expand: true,
-                    cwd: 'src/',
-                    src: '**',
-                    dest: 'dist/',
-                    filter: 'isFile',
-                    rename: function (dest, src) {
-                        // Change the path name utilize underscores for folders
-                        return dest + src.replace(/\//g, '.');
-                    }
-                }]
+                files: [
+                    {
+                        expand: true,
+                        cwd: 'src/',
+                        src: '**',
+                        dest: 'dist/',
+                        filter: 'isFile',
+                        rename: function (dest, src) {
+                            // Change the path name utilize underscores for folders
+                            return dest + src.replace(/\//g, '.');
+                        }
+                    },
+                    {
+                        expand: true,
+                        cwd: 'test/',
+                        src: '**',
+                        dest: 'dist/test_',
+                        filter: 'isFile',
+                        rename: function (dest, src) {
+                            // Change the path name utilize underscores for folders
+                            return dest + src.replace(/\//g, '.');
+                        }
+                    }]
             }
         },
 
@@ -57,8 +70,18 @@ module.exports = function(grunt) {
                     }
                 ]
             }
-        }
-    })
+        },
 
-    grunt.registerTask('default',  ['clean', 'copy:screeps', 'file_append:version', 'screeps']);
-}
+        mochaTest: {
+            test: {
+                options: {
+                    reporter: 'spec',
+                },
+                src: ['dist/test_*.js']
+            }
+        }
+    });
+
+    grunt.registerTask('default',  ['clean', 'copy:screeps', 'mochaTest', 'file_append:version', 'screeps']);
+    grunt.registerTask('test',     ['clean', 'copy:screeps', 'mochaTest']);
+};
