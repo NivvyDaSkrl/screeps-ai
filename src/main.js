@@ -119,6 +119,7 @@ module.exports.loop = function () {
 
     utilStats.resetCreepStatsForTick();
 
+    incrementalTime();
     // run creep logic
     for(let name in Game.creeps) {
         let creep = Game.creeps[name];
