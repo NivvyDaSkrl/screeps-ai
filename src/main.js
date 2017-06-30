@@ -1,3 +1,6 @@
+const Scheduler = require('schedule.Scheduler');
+const Task = require('schedule.Task');
+
 let creepOrchestrator = require('creep.orchestrate');
 let roleWorker = require('role.worker');
 let roleUpgrader = require('role.upgrader');
@@ -5,6 +8,8 @@ let roleBuilder = require('role.builder');
 let roleSoldier = require('role.soldier');
 
 let transientCache = require('cache.transient');
+
+let utilStats = require('util.stats');
 
 let spawningInfo = [
     {role: roleWorker,   target: 7},
@@ -22,86 +27,66 @@ let incrementalTime = function() {
     return rval;
 };
 
+/* Here, we schedule some routine tasks. */
 
-//metric-gathering; placed in main temporarily. I need to make a proper module for this
-let storeStats = function() {
-    let startTime = Game.cpu.getUsed();
-    if (Memory.stats == null) {
-        Memory.stats = {tick: Game.time};
-    }
+const LOW_PRIORITY    = 90;
+const NORMAL_PRIORITY = 50;
+const HIGH_PRIORITY   = 20;
 
-    Memory.stats.cpu = Game.cpu;
-    Memory.stats.gcl = Game.gcl;
-    Memory.stats.memory = {
-        used: RawMemory.get().length
-    };
-    Memory.stats.market = {
-        credits: Game.market.credits,
-        num_orders: Game.market.orders ? Object.keys(Game.market.orders).length : 0
-    };
-    Memory.stats.room = {};
-    for(let name in Game.rooms) {
-        if(Game.rooms[name]) {
-            Memory.stats.room[name] = {};
-            if(Game.rooms[name].controller) {
-                Memory.stats.room[name].controllerProgress = Game.rooms[name].controller.progress;
-                Memory.stats.room[name].controllerProgressTotal = Game.rooms[name].controller.progressTotal;
+const EVERY_TICK   = 1;
+const FREQUENTLY   = 3;
+const OCCASIONALLY = 7;
+
+let scheduler = global.scheduler = new Scheduler();
+
+// Clear dead creeps' memory periodically.
+scheduler.addTask( new Task(
+    function() {
+        // clear creep memory
+        for(let name in Memory.creeps) {
+            if (!Game.creeps[name]) {
+                delete Memory.creeps[name];
             }
-            Memory.stats.room[name].energyAvailable = Game.rooms[name].energyAvailable;
-            Memory.stats.room[name].energyCapacityAvailable = Game.rooms[name].energyCapacityAvailable;
-            let structures = Game.rooms[name].find(FIND_STRUCTURES, {filter:
-                (s) => {return s.structureType === STRUCTURE_CONTAINER && s.store}});
-            Memory.stats.room[name].energyStorage = 0;
-            Memory.stats.room[name].storageAvailable = 0;
-            for(let struct in structures) {
-                Memory.stats.room[name].storageAvailable += structures[struct].storeCapacity;
-                if(structures[struct].store){
-                    Memory.stats.room[name].energyStorage += structures[struct].store[RESOURCE_ENERGY];
-                }
+        }
+        console.log('   TASK: Dead creep memory task completed.');
+        return true;
+    }, null, LOW_PRIORITY, 3, OCCASIONALLY
+));
+
+// Clear cache frequently
+scheduler.addTask( new Task(() =>
+    {console.log("   TASK:", transientCache.prune(), 'records purged from cache.'); return true;},
+    null, LOW_PRIORITY, 2, FREQUENTLY
+));
+
+// Find max creep cost occasionally
+scheduler.addTask( new Task(
+    function() {
+        let maxCost = Game.spawns['Home'].energyCapacity;
+        let extensions = Game.spawns['Home'].room.find(
+            FIND_STRUCTURES,
+            {
+                filter: (structure) => {return structure.structureType === STRUCTURE_EXTENSION}
             }
-
+        );
+        for(let index in extensions) {
+            maxCost += extensions[index].energyCapacity;
         }
-
-    }
-    for(let name in Game.creeps) {
-        if(!Memory.stats.room[Game.creeps[name].room.name].creeps) {
-            Memory.stats.room[Game.creeps[name].room.name].creeps = 1;
-            Memory.stats.room[Game.creeps[name].room.name].energyOnCreeps = Game.creeps[name].carry[RESOURCE_ENERGY];
-        } else {
-            Memory.stats.room[Game.creeps[name].room.name].creeps++;
-            Memory.stats.room[Game.creeps[name].room.name].energyOnCreeps += Game.creeps[name].carry[RESOURCE_ENERGY];
-        }
-    }
-    Memory.stats.cpu.statsLoading = Game.cpu.getUsed() - startTime;
-    Memory.stats.cpu.used = Game.cpu.getUsed();
-};
+        transientCache.storeValue('maxCost', maxCost);
+        console.log('   TASK: max creep size calculated:', transientCache.fetchValue('maxCost'));
+        return true;
+    }, null, LOW_PRIORITY, 0, OCCASIONALLY
+));
 
 Memory.ticksToLastRefresh = 0;
-console.log('T:', Game.cpu.getUsed(), '| Setup completed.');
 module.exports.loop = function () {
     timeUsed = Game.cpu.getUsed();
-    console.log('T:', timeUsed, '| Loop start');
-    // clear out old memory
-    for(let name in Memory.creeps) {
-        if(!Game.creeps[name]) {
-            delete Memory.creeps[name];
-            console.log('Clearing non-existing creep memory:', name);
-        }
-    }
-    console.log('T:', incrementalTime(), '| Memory cleared.');
 
     // max cost of spawned creeps
-    let maxCost = Game.spawns['Home'].energyCapacity;
-    let extensions = Game.spawns['Home'].room.find(
-        FIND_STRUCTURES,
-        {
-            filter: (structure) => {return structure.structureType === STRUCTURE_EXTENSION}
-        }
-    );
-    for(let index in extensions) {
-        maxCost += extensions[index].energyCapacity;
+    let maxCost = transientCache.fetchValue('maxCost');
+    if(!maxCost) {
+        maxCost = 0;
     }
-    console.log('T:', incrementalTime(), '| Max creep size calculated.');
 
     // spawn additional creeps up to target numbers
     for(let index in spawningInfo) {
@@ -131,28 +116,25 @@ module.exports.loop = function () {
             break;
         }
     }
-    console.log('T:', incrementalTime(), '| Creep spawning finished.');
 
-    Memory.stats.behavior = {};
+    utilStats.resetCreepStatsForTick();
 
     // run creep logic
     for(let name in Game.creeps) {
         let creep = Game.creeps[name];
         creepOrchestrator.run(creep);
-        let currTime = incrementalTime();
-        if(!Memory.stats.behavior[creep.memory.currentBehavior]) {
-            Memory.stats.behavior[creep.memory.currentBehavior] = currTime;
-        } else {
-            Memory.stats.behavior[creep.memory.currentBehavior] += currTime;
-        }
-        if (currTime > 1) {
-            console.log('-----', currTime, name, creep.memory.currentBehavior, creep.memory.timeOnCurrentBehavior);
-        }
+
+        utilStats.creepBehaviorStats(creep, incrementalTime());
     }
 
-    let numPruned = transientCache.prune();
-    console.log('T:', incrementalTime(), '|', numPruned, 'records pruned from cache.');
+    // run scheduled tasks
+    let tasksStartTime = new Date().getTime();
+    let numTasksRun = 0;
+    scheduler.tick();
+    while(scheduler.runTask()) { numTasksRun++ };
+    console.log('Number of tasks run this tick:', numTasksRun);
+    Memory.stats.cpu.scheduledTasks = new Date().getTime() - tasksStartTime;
 
-    storeStats();
+    utilStats.mainStats();
     console.log("Time to tick:", Game.cpu.getUsed(), '| Ticks since last refresh:', Memory.ticksToLastRefresh++);
 }
